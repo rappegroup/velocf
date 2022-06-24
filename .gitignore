@@ -1,0 +1,13 @@
+# Byte-compiled / optimized / DLL files
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Build files
+/build
+/dist
+*.egg-info/
+
+# Editor files
+.idea/
+.ipynb_checkpoints/
