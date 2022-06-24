@@ -1,6 +1,6 @@
 """Data structures for unit cell and trajectory."""
 
-from typing import NamedTuple, Sequence, Union, overload
+from typing import NamedTuple, Optional, Sequence, Union, overload
 
 import numpy as np
 import scipy.constants
@@ -17,7 +17,7 @@ class Structure(NamedTuple):
     """Periodic crystal structure."""
 
     basis: Basis
-    species: Species
+    species: Optional[Species]
     positions: Position
     coord_type: str
 
@@ -28,7 +28,7 @@ class Trajectory(Sequence[Structure]):
     def __init__(
         self,
         basis: Union[Basis, Sequence[Basis]],
-        species: Species,
+        species: Optional[Species],
         positions: Sequence[Position],
         coord_type: str,
         *,

@@ -7,16 +7,17 @@ import numpy as np
 from velocf.cell import Basis, Position, Species, Trajectory
 
 
-def get_species(fdf_lines: Iterable[str]) -> Species:
+def get_fdf_species(fdf_lines: Iterable[str]) -> Species:
     """Extract species order from an .fdf input."""
     species = []
-    for line in fdf_lines:
+    fdf_iter = iter(fdf_lines)
+    for line in fdf_iter:
         if "AtomicCoordinatesAndAtomicSpecies" in line:
-            for line in fdf_lines:
-                if "%endblock" in line:
+            for coord_line in fdf_iter:
+                if "%endblock" in coord_line:
                     break
                 # Gather the species
-                label = line.split()[-1]
+                label = coord_line.split()[-1]
                 species.append(label)
             else:
                 raise RuntimeError("AtomicCoordinates block unfinished")
@@ -56,7 +57,16 @@ def _read_mdcar_block(
     return basis, species, pos, coord_type
 
 
-def read_md_car(tag: str, mdc_lines: Iterable[str], species: Species) -> Trajectory:
+def read_md_car(
+    tag: str, mdc_lines: Iterable[str], species: Optional[Species]
+) -> Trajectory:
+    """Read trajectory from an .MD_CAR file.
+
+    Args:
+        tag: calculation prefix used in the file
+        mdc_lines: lines of the file
+        species: species for the structure (must be read from elsewhere)
+    """
     line_buf = []
     basis_buf = []
     ref_spec_order: Optional[Tuple[int, ...]] = None

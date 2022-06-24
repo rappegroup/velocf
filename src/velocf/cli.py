@@ -1,7 +1,7 @@
 import logging
 from argparse import ArgumentParser, Namespace
 from pathlib import Path
-from typing import Sequence
+from typing import Optional, Sequence
 
 from velocf.cell import Trajectory, calc_velocity, normalize_positions
 from velocf.corr import (
@@ -10,19 +10,24 @@ from velocf.corr import (
     write_freq_correlation,
     write_time_correlation,
 )
-from velocf.mdcar import read_md_car
+from velocf.mdcar import get_fdf_species, read_md_car
 
-# Todo: print config
 # todo: mask time corr
 # TODO: misc logging
 
 
-def load_trajectory(prefix: str, workdir: Path) -> Trajectory:
-    """TODO"""
-    # TODO: load species
+def load_trajectory(
+    prefix: str, workdir: Path, fdf_path: Optional[Path] = None
+) -> Trajectory:
+    """Load trajectory data from several provided files."""
+    if fdf_path is not None:
+        with open(fdf_path, encoding="utf8") as fdf_f:
+            species = get_fdf_species(fdf_f)
+    else:
+        species = None
     md_car_path = workdir.joinpath(f"{prefix}.MD_CAR")
-    with open(md_car_path) as f:
-        traj = read_md_car(prefix, f.readlines(), None)
+    with open(md_car_path, encoding="utf8") as mdcar_f:
+        traj = read_md_car(prefix, mdcar_f.readlines(), species)
     return normalize_positions(traj)
 
 
@@ -72,7 +77,6 @@ def set_verbosity(verbosity: int) -> None:
         logger.setLevel(logging.WARNING)
 
 
-# TODO: set trim of trajectory
 def velocf(cli_args: Sequence[str]) -> None:
     logging_init()
     args = parse_args(cli_args)
@@ -80,7 +84,7 @@ def velocf(cli_args: Sequence[str]) -> None:
     logger = logging.getLogger(__name__)
 
     # Read trajectory from file
-    traj = load_trajectory(args.prefix, args.workdir)
+    traj = load_trajectory(args.prefix, args.workdir, args.fdf)
     logger.info("Loaded %d trajectory steps", len(traj))
     if args.skip is not None:
         logger.info("Discarding %d initial steps", args.skip)
