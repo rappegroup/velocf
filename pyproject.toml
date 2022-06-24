@@ -1,0 +1,30 @@
+[tool.black]
+line-length = 88
+target-version = ['py39']
+
+
+[tool.mypy]
+mypy_path = "src"
+
+ignore_missing_imports = true
+#disallow_untyped_defs = true
+#check_untyped_defs = true
+
+# Strict type checking
+#disallow_untyped_calls = true
+#warn_return_any = true
+#strict_optional = true
+#warn_no_return = true
+warn_redundant_casts = true
+warn_unused_ignores = true
+#disallow_any_generics = true
+warn_unreachable = true
+
+
+[tool.pylint.messages_control]
+max-line-length = 88
+disable = [
+    "line-too-long",
+    "missing-docstring",
+    "no-else-return",
+]
