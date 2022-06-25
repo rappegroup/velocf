@@ -4,5 +4,10 @@ import sys
 
 from velocf.cli import velocf
 
-if __name__ == "__main__":
+
+def run() -> None:
     velocf(sys.argv[1:])
+
+
+if __name__ == "__main__":
+    run()
