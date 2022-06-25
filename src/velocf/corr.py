@@ -1,7 +1,7 @@
 """Calculate time and frequency domain auto-correlation functions."""
 
 import logging
-from typing import Optional, TextIO
+from typing import Optional
 
 import numpy as np
 import scipy.constants
@@ -63,14 +63,6 @@ def get_time_correlation(
     return corr
 
 
-def write_time_correlation(dest: TextIO, corr_fn: np.ndarray, time_step: float) -> None:
-    """Write time correlation function to an open file handle."""
-    header = "time(fs)   vel. autocorr(a.u./fs)^2"
-    t_grid = get_time_grid(len(corr_fn), time_step)
-    data = np.stack([t_grid, corr_fn]).T
-    np.savetxt(dest, data, header=header)
-
-
 def get_freq_grid(max_lag: int, time_step: float) -> np.ndarray:
     """Return frequency axis for correlation function.
 
@@ -82,20 +74,9 @@ def get_freq_grid(max_lag: int, time_step: float) -> np.ndarray:
     freq_thz = 1e3 * np.fft.rfftfreq(max_lag, time_step)
     # Note: 1 cm^-1 = 1e10/c THz
     freq_wavenumber = 1e10 / scipy.constants.c * freq_thz
-    return np.stack([freq_thz, freq_wavenumber]).T
+    return np.stack([freq_thz, freq_wavenumber])
 
 
 def get_freq_correlation(time_correlation: np.ndarray) -> np.ndarray:
     """Return frequency domain auto-correlation function."""
     return np.fft.rfft(time_correlation)
-
-
-def write_freq_correlation(
-    dest: TextIO, corr_fn: np.ndarray, max_lag: int, time_step: float
-) -> None:
-    """Write frequency correlation function to an open file."""
-    header = "freq(THz)   freq(cm-1)    |G(w)|^2    arg[G(w)]"
-    data = np.stack([np.abs(corr_fn) ** 2, np.angle(corr_fn)]).T
-    freq_grid = get_freq_grid(max_lag, time_step)
-    data = np.hstack([freq_grid, data])
-    np.savetxt(dest, data, header=header)

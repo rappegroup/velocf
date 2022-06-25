@@ -1,14 +1,16 @@
 import logging
 from argparse import ArgumentParser, Namespace
 from pathlib import Path
-from typing import Optional, Sequence
+from typing import Optional, Sequence, Tuple
+
+import numpy as np
 
 from velocf.cell import Trajectory, calc_velocity, normalize_positions
 from velocf.corr import (
     get_freq_correlation,
+    get_freq_grid,
     get_time_correlation,
-    write_freq_correlation,
-    write_time_correlation,
+    get_time_grid,
 )
 from velocf.mdcar import get_fdf_species, read_md_car
 
@@ -16,7 +18,7 @@ from velocf.mdcar import get_fdf_species, read_md_car
 # TODO: misc logging
 
 
-def load_trajectory(
+def _load_trajectory(
     prefix: str, workdir: Path, fdf_path: Optional[Path] = None
 ) -> Trajectory:
     """Load trajectory data from several provided files."""
@@ -29,6 +31,47 @@ def load_trajectory(
     with open(md_car_path, encoding="utf8") as mdcar_f:
         traj = read_md_car(prefix, mdcar_f.readlines(), species)
     return normalize_positions(traj)
+
+
+def _calculate_correlation(
+    velocity: np.ndarray, lag: int, time_step: float
+) -> Tuple[np.ndarray, np.ndarray]:
+    """Calculate correlation functions for velocity data."""
+    logger = logging.getLogger(__name__)
+
+    # Calculate time correlation function
+    time_corr = get_time_correlation(velocity, max_lag=lag)
+    logger.info("Calculated time correlation function")
+    time_grid = get_time_grid(len(time_corr), time_step)
+    time_data = np.stack([time_grid, time_corr]).T
+
+    # Calculate frequency correlation
+    freq_corr = get_freq_correlation(time_corr)
+    logger.info("Calculated frequency correlation function")
+    freq_grid = get_freq_grid(len(time_corr), time_step)
+    freq_data = np.vstack([freq_grid, np.abs(freq_corr) ** 2, np.angle(freq_corr)]).T
+
+    return time_data, freq_data
+
+
+def _write_correlation(
+    time_corr: np.ndarray, freq_corr: np.ndarray, out_dir: Path, out_prefix: str
+) -> None:
+    logger = logging.getLogger(__name__)
+
+    logger.info("Writing correlation functions to file")
+
+    # Write time correlation to file
+    corr_path = out_dir.joinpath(out_prefix + ".VCT")
+    logger.debug("Writing time correlation to %s", str(corr_path))
+    header = "time(fs)   vel. autocorr(a.u./fs)^2"
+    np.savetxt(corr_path, time_corr, header=header)
+
+    # Write velocity correlation to file
+    corr_path = out_dir.joinpath(out_prefix + ".VCF")
+    logger.debug("Writing frequency correlation to %s", str(corr_path))
+    header = "freq(THz)   freq(cm-1)    |G(w)|^2    arg[G(w)]"
+    np.savetxt(corr_path, freq_corr, header=header)
 
 
 def parse_args(args: Sequence[str]) -> Namespace:
@@ -78,36 +121,22 @@ def set_verbosity(verbosity: int) -> None:
 
 
 def velocf(cli_args: Sequence[str]) -> None:
+    """Run CLI for main program."""
     logging_init()
     args = parse_args(cli_args)
     set_verbosity(args.verbosity)
     logger = logging.getLogger(__name__)
 
     # Read trajectory from file
-    traj = load_trajectory(args.prefix, args.workdir, args.fdf)
+    traj = _load_trajectory(args.prefix, args.workdir, args.fdf)
     logger.info("Loaded %d trajectory steps", len(traj))
     if args.skip is not None:
         logger.info("Discarding %d initial steps", args.skip)
-        traj = traj[args.skip:]
+        traj = traj[args.skip :]
+
     # Calculate velocity
     velocity = calc_velocity(traj, args.dt)
     logger.debug("Calculated velocity for trajectory")
 
-    # Calculate time correlation function
-    time_corr = get_time_correlation(velocity, max_lag=args.lag)
-    logger.info("Calculated time correlation function")
-    # Calculate frequency correlation
-    freq_corr = get_freq_correlation(time_corr)
-    logger.info("Calculated frequency correlation function")
-
-    logger.info("Writing correlation functions to file")
-    # Write time correlation to file
-    corr_path = args.outdir.joinpath(args.out_prefix + ".VCT")
-    logger.debug("Writing time correlation to %s", str(corr_path))
-    with open(corr_path, "w", encoding="utf8") as f_out:
-        write_time_correlation(f_out, time_corr, args.dt)
-    # Write velocity correlation to file
-    corr_path = args.outdir.joinpath(args.out_prefix + ".VCF")
-    logger.debug("Writing frequency correlation to %s", str(corr_path))
-    with open(corr_path, "w", encoding="utf8") as f_out:
-        write_freq_correlation(f_out, freq_corr, len(time_corr), args.dt)
+    time_corr, freq_corr = _calculate_correlation(velocity, args.lag, args.dt)
+    _write_correlation(time_corr, freq_corr, args.outdir, args.out_prefix)
