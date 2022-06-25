@@ -50,7 +50,11 @@ def get_time_correlation(
     if max_lag < 0 or max_lag >= len(velocity):
         raise ValueError(f"Invalid correlation time lag {max_lag}")
 
-    logger.debug("Calculating time correlation with max lag of %d steps", max_lag)
+    logger.debug(
+        "Calculating time correlation for %d atoms with max lag of %d steps",
+        velocity.shape[1],
+        max_lag,
+    )
 
     # Allocate space for time domain correlation
     corr = np.zeros(max_lag)

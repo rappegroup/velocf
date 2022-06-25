@@ -81,9 +81,13 @@ def parse_args(args: Sequence[str]) -> Namespace:
     parser.add_argument(
         "--lag", type=int, help="Max lag for time correlation. -1 for full trajectory"
     )
-    parser.add_argument("--skip", type=int, help="Discard initial steps from the MD trajectory")
+    parser.add_argument(
+        "--skip", type=int, help="Discard initial steps from the MD trajectory"
+    )
     parser.add_argument("--fdf", type=Path)
-    parser.add_argument("--workdir", type=Path, default=Path.cwd(), help="Directory with input files")
+    parser.add_argument(
+        "--workdir", type=Path, default=Path.cwd(), help="Directory with input files"
+    )
     parser.add_argument("--out-pref", dest="out_prefix", help="Prefix for output files")
     parser.add_argument("--outdir", type=Path, help="Directory to put output files")
     parser.add_argument("-v", action="count", dest="verbosity", default=0)
