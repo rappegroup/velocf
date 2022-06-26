@@ -5,7 +5,7 @@ from typing import Optional, Sequence, Tuple
 
 import numpy as np
 
-from velocf.cell import Trajectory, calc_velocity, normalize_positions
+from velocf.cell import Species, Trajectory, calc_velocity, normalize_positions
 from velocf.corr import (
     get_freq_correlation,
     get_freq_grid,
@@ -13,9 +13,6 @@ from velocf.corr import (
     get_time_grid,
 )
 from velocf.mdcar import get_fdf_species, read_md_car
-
-# todo: mask time corr
-# TODO: misc logging
 
 
 def _load_trajectory(
@@ -74,9 +71,18 @@ def _write_correlation(
     np.savetxt(corr_path, freq_corr, header=header)
 
 
+def _mask_velocity(
+    velocity: np.ndarray, species: Species, target_species: str
+) -> np.ndarray:
+    """Select only velocities for atoms of target_species."""
+    assert len(species) == velocity.shape[1]
+    mask = tuple(sp == target_species for sp in species)
+    return velocity[:, mask]
+
+
 def parse_args(args: Sequence[str]) -> Namespace:
     parser = ArgumentParser(prog="velocf")
-    parser.add_argument("prefix")
+    parser.add_argument("prefix", help="prefix for siesta output files")
     parser.add_argument("dt", type=float, help="MD timestep in fs")
     parser.add_argument(
         "--lag", type=int, help="Max lag for time correlation. -1 for full trajectory"
@@ -84,7 +90,9 @@ def parse_args(args: Sequence[str]) -> Namespace:
     parser.add_argument(
         "--skip", type=int, help="Discard initial steps from the MD trajectory"
     )
-    parser.add_argument("--fdf", type=Path)
+    parser.add_argument(
+        "--fdf", type=Path, help="Path to .fdf file to read species from"
+    )
     parser.add_argument(
         "--workdir", type=Path, default=Path.cwd(), help="Directory with input files"
     )
@@ -142,5 +150,18 @@ def velocf(cli_args: Sequence[str]) -> None:
     velocity = calc_velocity(traj, args.dt)
     logger.debug("Calculated velocity for trajectory")
 
+    # Do correlation for all atoms
     time_corr, freq_corr = _calculate_correlation(velocity, args.lag, args.dt)
     _write_correlation(time_corr, freq_corr, args.outdir, args.out_prefix)
+
+    # Do correlation by species
+    if traj.species is not None:
+        logger.info("Calculating correlation functions by species")
+        for target_spec in set(traj.species):
+            logger.debug("Doing correlation for %s", target_spec)
+            # Filter velocity
+            masked_vel = _mask_velocity(velocity, traj.species, target_spec)
+            time_corr, freq_corr = _calculate_correlation(masked_vel, args.lag, args.dt)
+            _write_correlation(
+                time_corr, freq_corr, args.outdir, f"{args.out_prefix}.{target_spec}"
+            )
