@@ -158,7 +158,7 @@ def velocf(cli_args: Sequence[str]) -> None:
     if traj.species is not None:
         logger.info("Calculating correlation functions by species")
         for target_spec in set(traj.species):
-            logger.debug("Doing correlation for %s", target_spec)
+            logger.info("Doing correlation for %s", target_spec)
             # Filter velocity
             masked_vel = _mask_velocity(velocity, traj.species, target_spec)
             time_corr, freq_corr = _calculate_correlation(masked_vel, args.lag, args.dt)
