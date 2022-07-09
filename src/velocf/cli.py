@@ -91,6 +91,9 @@ def parse_args(args: Sequence[str]) -> Namespace:
         "--skip", type=int, help="Discard initial steps from the MD trajectory"
     )
     parser.add_argument(
+        "--max-len", type=int, help="Take only this many trajectory steps"
+    )
+    parser.add_argument(
         "--fdf", type=Path, help="Path to .fdf file to read species from"
     )
     parser.add_argument(
@@ -145,6 +148,10 @@ def velocf(cli_args: Sequence[str]) -> None:
     if args.skip is not None:
         logger.info("Discarding %d initial steps", args.skip)
         traj = traj[args.skip :]
+    if args.max_len is not None:
+        if args.max_len < len(traj):
+            traj = traj[: args.max_len]
+        logger.info("Truncating trajectory to %d steps", len(traj))
 
     # Calculate velocity
     velocity = calc_velocity(traj, args.dt)
