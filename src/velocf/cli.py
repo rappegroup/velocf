@@ -13,20 +13,28 @@ from velocf.corr import (
     get_time_grid,
 )
 from velocf.mdcar import get_fdf_species, read_md_car
+from velocf.xsf import read_axsf
 
 
 def _load_trajectory(
-    prefix: str, workdir: Path, fdf_path: Optional[Path] = None
+    prefix: str,
+    workdir: Path,
+    fdf_path: Optional[Path] = None,
+    axsf_path: Optional[Path] = None,
 ) -> Trajectory:
     """Load trajectory data from several provided files."""
-    if fdf_path is not None:
-        with open(fdf_path, encoding="utf8") as fdf_f:
-            species = get_fdf_species(fdf_f)
+    if axsf_path is not None:
+        with open(axsf_path, encoding="utf8") as axsf_f:
+            traj = read_axsf(axsf_f)
     else:
-        species = None
-    md_car_path = workdir.joinpath(f"{prefix}.MD_CAR")
-    with open(md_car_path, encoding="utf8") as mdcar_f:
-        traj = read_md_car(prefix, mdcar_f.readlines(), species)
+        if fdf_path is not None:
+            with open(fdf_path, encoding="utf8") as fdf_f:
+                species = get_fdf_species(fdf_f)
+        else:
+            species = None
+        md_car_path = workdir.joinpath(f"{prefix}.MD_CAR")
+        with open(md_car_path, encoding="utf8") as mdcar_f:
+            traj = read_md_car(prefix, mdcar_f.readlines(), species)
     return normalize_positions(traj)
 
 
@@ -96,6 +104,7 @@ def parse_args(args: Sequence[str]) -> Namespace:
     parser.add_argument(
         "--fdf", type=Path, help="Path to .fdf file to read species from"
     )
+    parser.add_argument("--axsf", type=Path)
     parser.add_argument(
         "--workdir", type=Path, default=Path.cwd(), help="Directory with input files"
     )
@@ -143,7 +152,7 @@ def velocf(cli_args: Sequence[str]) -> None:
     logger = logging.getLogger(__name__)
 
     # Read trajectory from file
-    traj = _load_trajectory(args.prefix, args.workdir, args.fdf)
+    traj = _load_trajectory(args.prefix, args.workdir, args.fdf, args.axsf)
     logger.info("Loaded %d trajectory steps", len(traj))
     if args.skip is not None:
         logger.info("Discarding %d initial steps", args.skip)
