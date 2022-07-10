@@ -23,9 +23,13 @@ def _load_trajectory(
     axsf_path: Optional[Path] = None,
 ) -> Trajectory:
     """Load trajectory data from several provided files."""
+    # pylint: disable=import-outside-toplevel
+    from velocf.cell import convert_trajectory
+
     if axsf_path is not None:
         with open(axsf_path, encoding="utf8") as axsf_f:
             traj = read_axsf(axsf_f)
+        traj = convert_trajectory(traj, "crystal")
     else:
         if fdf_path is not None:
             with open(fdf_path, encoding="utf8") as fdf_f:
