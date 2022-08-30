@@ -24,10 +24,21 @@ def _lagged_correlation(velocity: np.ndarray, lag: int) -> float:
     :param lag: time steps to lag correlation
     :returns: average lagged auto-correlation
     """
+    # pylint: disable=import-outside-toplevel
+    try:
+        import numexpr as ne
+    except ModuleNotFoundError:
+        ne = None
+
     t_max = len(velocity) - lag
     n_at = velocity.shape[1]
     # Reduce over both time and atom axis
-    corr = np.sum(velocity[:t_max] * velocity[lag:])
+    if ne:
+        _v_head = velocity[:t_max]
+        _v_lag = velocity[lag:]
+        corr = ne.evaluate("sum(_v_head * _v_lag)")
+    else:
+        corr = np.sum(velocity[:t_max] * velocity[lag:])
     # Normalize by time steps and atoms
     corr /= n_at * t_max
     return float(corr)
