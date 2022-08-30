@@ -34,27 +34,40 @@ def _lagged_correlation(velocity: np.ndarray, lag: int) -> float:
 
 
 def get_time_correlation(
-    velocity: np.ndarray, max_lag: Optional[int] = None
+    velocity: np.ndarray,
+    max_lag: Optional[int] = None,
+    mass: Optional[np.ndarray] = None,
 ) -> np.ndarray:
     """Calculate time domain auto-correlation function.
 
     :param velocity: matrix of velocities, in a.u./fs; shape [n_time, n_atom, 3]
     :param max_lag: maximum time lag to include in correlation function
+    :param mass: vector of element masses; shape [n_atom,]
     :returns: time domain auto-correlation function
     """
     logger = logging.getLogger(__name__)
+    n_atom = velocity.shape[1]
     if max_lag is None:
         max_lag = len(velocity) // 2
     if max_lag == -1:
         max_lag = len(velocity) - 1
     if max_lag < 0 or max_lag >= len(velocity):
         raise ValueError(f"Invalid correlation time lag {max_lag}")
+    if mass is not None:
+        if len(mass) != n_atom:
+            raise ValueError(
+                f"Length of mass matrix ({len(mass)}) does not match number of atoms ({n_atom}"
+            )
 
     logger.debug(
         "Calculating time correlation for %d atoms with max lag of %d steps",
-        velocity.shape[1],
+        n_atom,
         max_lag,
     )
+
+    if mass is not None:
+        logger.info("Weighting trajectory by element mass")
+        velocity = mass.reshape((-1, 1)) * velocity
 
     # Allocate space for time domain correlation
     corr = np.zeros(max_lag)

@@ -1,8 +1,10 @@
+import argparse
 import logging
 from argparse import ArgumentParser, Namespace
 from pathlib import Path
 from typing import Optional, Sequence, Tuple
 
+import mendeleev
 import numpy as np
 
 from velocf.cell import Species, Trajectory, calc_velocity, normalize_positions
@@ -43,13 +45,19 @@ def _load_trajectory(
 
 
 def _calculate_correlation(
-    velocity: np.ndarray, lag: int, time_step: float
+    velocity: np.ndarray, lag: int, time_step: float, species: Optional[Species] = None
 ) -> Tuple[np.ndarray, np.ndarray]:
     """Calculate correlation functions for velocity data."""
     logger = logging.getLogger(__name__)
 
+    # Calculate element masses
+    if species is not None:
+        mass = np.array(tuple(map(lambda el: mendeleev.element(el).mass, species)))
+    else:
+        mass = None
+
     # Calculate time correlation function
-    time_corr = get_time_correlation(velocity, max_lag=lag)
+    time_corr = get_time_correlation(velocity, max_lag=lag, mass=mass)
     logger.info("Calculated time correlation function")
     time_grid = get_time_grid(len(time_corr), time_step)
     time_data = np.stack([time_grid, time_corr]).T
@@ -96,6 +104,7 @@ def parse_args(args: Sequence[str]) -> Namespace:
     parser = ArgumentParser(prog="velocf")
     parser.add_argument("prefix", help="prefix for siesta output files")
     parser.add_argument("dt", type=float, help="MD timestep in fs")
+
     parser.add_argument(
         "--lag", type=int, help="Max lag for time correlation. -1 for full trajectory"
     )
@@ -105,16 +114,31 @@ def parse_args(args: Sequence[str]) -> Namespace:
     parser.add_argument(
         "--max-len", type=int, help="Take only this many trajectory steps"
     )
+
     parser.add_argument(
         "--fdf", type=Path, help="Path to .fdf file to read species from"
     )
     parser.add_argument("--axsf", type=Path)
+    parser.add_argument(
+        "--mass-weight",
+        action=argparse.BooleanOptionalAction,
+        default=True,
+        help="Mass-weight the total correlation function",
+    )
+    parser.add_argument(
+        "--mask-species",
+        action=argparse.BooleanOptionalAction,
+        default=True,
+        help="Calculate species-resolved correlation functions",
+    )
+
     parser.add_argument(
         "--workdir", type=Path, default=Path.cwd(), help="Directory with input files"
     )
     parser.add_argument("--out-pref", dest="out_prefix", help="Prefix for output files")
     parser.add_argument("--outdir", type=Path, help="Directory to put output files")
     parser.add_argument("-v", action="count", dest="verbosity", default=0)
+
     parsed = parser.parse_args(args)
     # Set default args
     if parsed.out_prefix is None:
@@ -171,11 +195,16 @@ def velocf(cli_args: Sequence[str]) -> None:
     logger.debug("Calculated velocity for trajectory")
 
     # Do correlation for all atoms
-    time_corr, freq_corr = _calculate_correlation(velocity, args.lag, args.dt)
+    if args.mass_weight:
+        time_corr, freq_corr = _calculate_correlation(
+            velocity, args.lag, args.dt, species=traj.species
+        )
+    else:
+        time_corr, freq_corr = _calculate_correlation(velocity, args.lag, args.dt)
     _write_correlation(time_corr, freq_corr, args.outdir, args.out_prefix)
 
     # Do correlation by species
-    if traj.species is not None:
+    if traj.species is not None and args.mask_species:
         logger.info("Calculating correlation functions by species")
         for target_spec in set(traj.species):
             logger.info("Doing correlation for %s", target_spec)
