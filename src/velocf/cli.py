@@ -7,6 +7,7 @@ from typing import Optional, Sequence, Tuple
 import mendeleev
 import numpy as np
 
+from velocf import __version__
 from velocf.cell import Species, Trajectory, calc_velocity, normalize_positions
 from velocf.corr import (
     get_freq_correlation,
@@ -138,6 +139,9 @@ def parse_args(args: Sequence[str]) -> Namespace:
     parser.add_argument("--out-pref", dest="out_prefix", help="Prefix for output files")
     parser.add_argument("--outdir", type=Path, help="Directory to put output files")
     parser.add_argument("-v", action="count", dest="verbosity", default=0)
+    parser.add_argument(
+        "--version", "-V", action="version", version=f"%(prog)s {__version__}"
+    )
 
     parsed = parser.parse_args(args)
     # Set default args
