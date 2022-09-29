@@ -78,7 +78,7 @@ def get_time_correlation(
 
     if mass is not None:
         logger.info("Weighting trajectory by element mass")
-        velocity = mass.reshape((-1, 1)) * velocity
+        velocity = np.sqrt(mass.reshape((-1, 1))) * velocity
 
     # Allocate space for time domain correlation
     corr = np.zeros(max_lag)
@@ -108,3 +108,35 @@ def get_freq_grid(max_lag: int, time_step: float) -> np.ndarray:
 def get_freq_correlation(time_correlation: np.ndarray) -> np.ndarray:
     """Return frequency domain auto-correlation function."""
     return np.fft.rfft(time_correlation)
+
+
+def get_freq_correlation_wk(
+    velocity: np.ndarray,
+    mass: Optional[np.ndarray] = None,
+) -> np.ndarray:
+    """Calculate the frequency domain autocorrelation.
+
+    Uses the Wiener Khinchin theorem. The frequency domain velocity autocorrelation is
+    the norm square of the fourier transform of the velocity.
+
+    :param velocity: matrix of velocities, in a.u./fs; shape [n_time, n_atom, 3]
+    :param mass: vector of element masses; shape [n_atom,]
+    :returns: frequency domain auto-correlation function
+    """
+    logger = logging.getLogger(__name__)
+    ft_velo_sq = np.abs(np.fft.rfft(velocity, axis=0)) ** 2
+    if mass is not None:
+        logger.info("Weighting trajectory by element mass")
+        ft_velo_sq = mass.reshape((-1, 1)) * ft_velo_sq
+    # Average over atoms and sum on cartesian directions
+    freq_corr = np.sum(ft_velo_sq, axis=(1, 2))
+    freq_corr /= velocity.shape[1]
+    # Apply normalization from fourier transform
+    freq_corr /= len(velocity)
+    return freq_corr
+
+
+def get_time_correlation_wk(freq_correlation: np.ndarray) -> np.ndarray:
+    """Calculate time correlation from FFT of the frequency spectrum."""
+    # This is really an inverse transform, normalize appropriately
+    return np.fft.hfft(freq_correlation, norm="forward")[: len(freq_correlation)]

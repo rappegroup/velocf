@@ -11,8 +11,10 @@ from velocf import __version__
 from velocf.cell import Species, Trajectory, calc_velocity, normalize_positions
 from velocf.corr import (
     get_freq_correlation,
+    get_freq_correlation_wk,
     get_freq_grid,
     get_time_correlation,
+    get_time_correlation_wk,
     get_time_grid,
 )
 from velocf.mdcar import get_fdf_species, read_md_car
@@ -46,7 +48,11 @@ def _load_trajectory(
 
 
 def _calculate_correlation(
-    velocity: np.ndarray, lag: int, time_step: float, species: Optional[Species] = None
+    velocity: np.ndarray,
+    lag: int,
+    time_step: float,
+    species: Optional[Species] = None,
+    use_wk=False,
 ) -> Tuple[np.ndarray, np.ndarray]:
     """Calculate correlation functions for velocity data."""
     logger = logging.getLogger(__name__)
@@ -57,16 +63,25 @@ def _calculate_correlation(
     else:
         mass = None
 
-    # Calculate time correlation function
-    time_corr = get_time_correlation(velocity, max_lag=lag, mass=mass)
-    logger.info("Calculated time correlation function")
+    if not use_wk:
+        # Calculate time correlation function
+        time_corr = get_time_correlation(velocity, max_lag=lag, mass=mass)
+        logger.info("Calculated time correlation function")
+        # Calculate frequency correlation
+        freq_grid = get_freq_grid(len(time_corr), time_step)
+        freq_corr = get_freq_correlation(time_corr)
+        logger.info("Calculated frequency correlation function")
+    else:
+        logger.info("Calculating correlation using Wiener Khinchin theorem")
+        freq_grid = get_freq_grid(len(velocity), time_step)
+        freq_corr = get_freq_correlation_wk(velocity, mass=mass)
+        logger.info("Calculated frequency correlation function")
+        time_corr = get_time_correlation_wk(freq_corr)
+        logger.info("Calculated time correlation function")
+
+    # Assemble data for output
     time_grid = get_time_grid(len(time_corr), time_step)
     time_data = np.stack([time_grid, time_corr]).T
-
-    # Calculate frequency correlation
-    freq_corr = get_freq_correlation(time_corr)
-    logger.info("Calculated frequency correlation function")
-    freq_grid = get_freq_grid(len(time_corr), time_step)
     freq_data = np.vstack([freq_grid, np.abs(freq_corr) ** 2, np.angle(freq_corr)]).T
 
     return time_data, freq_data
@@ -114,6 +129,11 @@ def parse_args(args: Sequence[str]) -> Namespace:
     )
     parser.add_argument(
         "--max-len", type=int, help="Take only this many trajectory steps"
+    )
+    parser.add_argument(
+        "--wk-corr",
+        action="store_true",
+        help="Calculate correlation using Wiener Khinchin theorem",
     )
 
     parser.add_argument(
@@ -199,12 +219,11 @@ def velocf(cli_args: Sequence[str]) -> None:
     logger.debug("Calculated velocity for trajectory")
 
     # Do correlation for all atoms
-    if args.mass_weight:
-        time_corr, freq_corr = _calculate_correlation(
-            velocity, args.lag, args.dt, species=traj.species
-        )
-    else:
-        time_corr, freq_corr = _calculate_correlation(velocity, args.lag, args.dt)
+    species = traj.species if args.mass_weight else None
+    time_corr, freq_corr = _calculate_correlation(
+        velocity, args.lag, args.dt, species=species, use_wk=args.wk_corr
+    )
+
     _write_correlation(time_corr, freq_corr, args.outdir, args.out_prefix)
 
     # Do correlation by species
