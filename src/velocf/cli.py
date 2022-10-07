@@ -233,7 +233,9 @@ def velocf(cli_args: Sequence[str]) -> None:
             logger.info("Doing correlation for %s", target_spec)
             # Filter velocity
             masked_vel = _mask_velocity(velocity, traj.species, target_spec)
-            time_corr, freq_corr = _calculate_correlation(masked_vel, args.lag, args.dt)
+            time_corr, freq_corr = _calculate_correlation(
+                masked_vel, args.lag, args.dt, use_wk=args.wk_corr
+            )
             _write_correlation(
                 time_corr, freq_corr, args.outdir, f"{args.out_prefix}.{target_spec}"
             )
