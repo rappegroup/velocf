@@ -4,7 +4,7 @@ from typing import Iterable, Iterator, Optional, Tuple
 
 import numpy as np
 
-from velocf.cell import Basis, Position, Species, Trajectory
+from velocf.cell import Basis, Position, Species, Structure, Trajectory
 
 
 def _get_next_line(lines: Iterator[str]) -> str:
@@ -77,6 +77,18 @@ def _read_primcoord(lines: Iterator[str]) -> Tuple[Species, Position, Optional[i
         positions.append(tuple(float(x) for x in line[1:4]))
 
     return tuple(species), np.array(positions), step
+
+
+def read_xsf(lines: Iterable[str]) -> Structure:
+    """Read a *.xsf file with one structure."""
+    lines_iter = iter(lines)
+    header_line = _get_next_line(lines_iter)
+    assert header_line.startswith("CRYSTAL") or header_line.startswith("POLYMER")
+    basis, step = _read_primvec(lines_iter)
+    assert step is None
+    species, pos, step = _read_primcoord(lines_iter)
+    assert step is None
+    return Structure(basis, species, pos, "angstrom")
 
 
 def read_axsf(

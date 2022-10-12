@@ -34,8 +34,8 @@ def _lagged_correlation(velocity: np.ndarray, lag: int) -> float:
     n_at = velocity.shape[1]
     # Reduce over both time and atom axis
     if ne:
-        _v_head = velocity[:t_max]
-        _v_lag = velocity[lag:]
+        _v_head = velocity[:t_max]  # noqa: F841
+        _v_lag = velocity[lag:]  # noqa: F841
         corr = ne.evaluate("sum(_v_head * _v_lag)")
     else:
         corr = np.sum(velocity[:t_max] * velocity[lag:])

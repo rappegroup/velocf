@@ -167,6 +167,23 @@ def _from_crystal_traj(
     raise ValueError(f"Invalid position coordinate type {out_type}")
 
 
+def min_distance(ref_pos: Position, struct: Structure) -> Sequence[float]:
+    """Minimum distance to each atom in struct, in angstrom.
+
+    Args:
+        ref_pos: Position to measure against, in crystal coordinates
+        struct: Structure with positions to measure
+    """
+    struct = convert_positions(struct, "crystal")
+    # In crystal coord
+    delta_pos = struct.positions - ref_pos
+    delta_pos[delta_pos > 0.5] -= 1.0
+    delta_pos[delta_pos < -0.5] += 1.0
+    # To cartesian coordinates
+    np.matmul(delta_pos, struct.basis, out=delta_pos)
+    return np.linalg.norm(delta_pos, axis=1)
+
+
 def normalize_positions(traj: Trajectory) -> Trajectory:
     """Normalize trajectory to remove jumps across the periodic boundary.
 

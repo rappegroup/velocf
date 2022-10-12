@@ -2,13 +2,20 @@ import argparse
 import logging
 from argparse import ArgumentParser, Namespace
 from pathlib import Path
-from typing import Optional, Sequence, Tuple
+from typing import List, Optional, Sequence, Tuple
 
 import mendeleev
 import numpy as np
 
 from velocf import __version__
-from velocf.cell import Species, Trajectory, calc_velocity, normalize_positions
+from velocf.cell import (
+    Species,
+    Trajectory,
+    calc_velocity,
+    convert_positions,
+    min_distance,
+    normalize_positions,
+)
 from velocf.corr import (
     get_freq_correlation,
     get_freq_correlation_wk,
@@ -18,7 +25,7 @@ from velocf.corr import (
     get_time_grid,
 )
 from velocf.mdcar import get_fdf_species, read_md_car
-from velocf.xsf import read_axsf
+from velocf.xsf import read_axsf, read_xsf
 
 
 def _load_trajectory(
@@ -45,6 +52,33 @@ def _load_trajectory(
         with open(md_car_path, encoding="utf8") as mdcar_f:
             traj = read_md_car(prefix, mdcar_f.readlines(), species)
     return normalize_positions(traj)
+
+
+def _restrict_trajectory(traj: Trajectory, select_path: Path) -> Trajectory:
+    with open(select_path, encoding="utf8") as f_select:
+        select_struct = read_xsf(f_select)
+
+    select_struct = convert_positions(select_struct, "crystal")
+    init_struct = convert_positions(traj[0], "crystal")
+    select_idx: List[int] = []
+
+    for i, pos in enumerate(select_struct.positions):
+        idx_min = int(np.argmin(min_distance(pos, init_struct)))
+        if init_struct.species is not None and select_struct.species is not None:
+            assert select_struct.species[i] == init_struct.species[idx_min]
+            select_idx.append(idx_min)
+
+    select_idx = sorted(select_idx)
+    # Assert no duplicates
+    assert len(np.unique(select_idx)) == len(select_idx)
+
+    return Trajectory(
+        traj.basis,
+        traj.species,
+        traj.positions[:, select_idx],
+        traj.coord_type,
+        var_cell=traj.var_cell,
+    )
 
 
 def _calculate_correlation(
@@ -139,7 +173,13 @@ def parse_args(args: Sequence[str]) -> Namespace:
     parser.add_argument(
         "--fdf", type=Path, help="Path to .fdf file to read species from"
     )
-    parser.add_argument("--axsf", type=Path)
+    parser.add_argument("--axsf", type=Path, help="Input trajectory in .axsf format")
+    parser.add_argument(
+        "--select",
+        type=Path,
+        metavar="XSF",
+        help="Use only atoms in the structure for correlation",
+    )
     parser.add_argument(
         "--mass-weight",
         action=argparse.BooleanOptionalAction,
@@ -206,6 +246,14 @@ def velocf(cli_args: Sequence[str]) -> None:
     # Read trajectory from file
     traj = _load_trajectory(args.prefix, args.workdir, args.fdf, args.axsf)
     logger.info("Loaded %d trajectory steps", len(traj))
+
+    # Pick only certain atoms
+    if args.select is not None:
+        logger.info("Restricting atoms based on provided structure")
+        traj = _restrict_trajectory(traj, args.select)
+        logger.debug("New trajectory contains %d atoms", len(traj.species))
+
+    # Trim the trajectory length
     if args.skip is not None:
         logger.info("Discarding %d initial steps", args.skip)
         traj = traj[args.skip :]
