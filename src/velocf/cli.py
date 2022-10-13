@@ -74,7 +74,7 @@ def _restrict_trajectory(traj: Trajectory, select_path: Path) -> Trajectory:
 
     return Trajectory(
         traj.basis,
-        traj.species,
+        tuple(traj.species[i] for i in select_idx),
         traj.positions[:, select_idx],
         traj.coord_type,
         var_cell=traj.var_cell,
