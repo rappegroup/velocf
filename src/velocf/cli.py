@@ -28,29 +28,59 @@ from velocf.mdcar import get_fdf_species, read_md_car
 from velocf.xsf import read_axsf, read_xsf
 
 
-def _load_trajectory(
-    prefix: str,
-    workdir: Path,
-    fdf_path: Optional[Path] = None,
-    axsf_path: Optional[Path] = None,
+def _parse_input_path(
+    prefix: str, workdir: Optional[Path]
+) -> Tuple[str, Path, Path, bool]:
+    """Returns prefix, in_path, workdir, is_axsf."""
+    is_axsf = False
+    if prefix.endswith(".axsf"):
+        in_path = Path(prefix)
+        is_axsf = True
+    elif prefix.endswith(".MD_CAR"):
+        in_path = Path(prefix)
+    else:
+        # Prefix only for siesta output
+        in_path = Path(f"{prefix}.MD_CAR")
+
+    prefix = in_path.stem
+    if workdir is None:
+        workdir = in_path.parent.resolve()
+    return prefix, in_path, workdir, is_axsf
+
+
+def _load_mdc_trajectory(
+    prefix: str, mdc_path: Path, fdf_path: Optional[Path] = None
 ) -> Trajectory:
-    """Load trajectory data from several provided files."""
+    if fdf_path is not None:
+        with open(fdf_path, encoding="utf8") as fdf_f:
+            species = get_fdf_species(fdf_f)
+    else:
+        species = None
+    with open(mdc_path, encoding="utf8") as mdcar_f:
+        return read_md_car(prefix, mdcar_f.readlines(), species)
+
+
+def _load_axsf_trajectory(axsf_path: Path) -> Trajectory:
     # pylint: disable=import-outside-toplevel
     from velocf.cell import convert_trajectory
 
-    if axsf_path is not None:
-        with open(axsf_path, encoding="utf8") as axsf_f:
-            traj = read_axsf(axsf_f)
-        traj = convert_trajectory(traj, "crystal")
+    with open(axsf_path, encoding="utf8") as axsf_f:
+        traj = read_axsf(axsf_f)
+    return convert_trajectory(traj, "crystal")
+
+
+def _load_trajectory(
+    prefix: str,
+    in_path: Path,
+    is_axsf: bool,
+    fdf_path: Optional[Path] = None,
+) -> Trajectory:
+    """Load trajectory data from several provided files."""
+
+    if is_axsf:
+        traj = _load_axsf_trajectory(in_path)
     else:
-        if fdf_path is not None:
-            with open(fdf_path, encoding="utf8") as fdf_f:
-                species = get_fdf_species(fdf_f)
-        else:
-            species = None
-        md_car_path = workdir.joinpath(f"{prefix}.MD_CAR")
-        with open(md_car_path, encoding="utf8") as mdcar_f:
-            traj = read_md_car(prefix, mdcar_f.readlines(), species)
+        traj = _load_mdc_trajectory(prefix, in_path, fdf_path)
     return normalize_positions(traj)
 
 
@@ -152,8 +182,9 @@ def _mask_velocity(
 
 def parse_args(args: Sequence[str]) -> Namespace:
     parser = ArgumentParser(prog="velocf")
-    parser.add_argument("prefix", help="prefix for siesta output files")
+    parser.add_argument("input", help="Trajectory input file")
     parser.add_argument("dt", type=float, help="MD timestep in fs")
+    parser.add_argument("--prefix", help="prefix for siesta output files")
 
     parser.add_argument(
         "--lag", type=int, help="Max lag for time correlation. -1 for full trajectory"
@@ -173,7 +204,6 @@ def parse_args(args: Sequence[str]) -> Namespace:
     parser.add_argument(
         "--fdf", type=Path, help="Path to .fdf file to read species from"
     )
-    parser.add_argument("--axsf", type=Path, help="Input trajectory in .axsf format")
     parser.add_argument(
         "--select",
         type=Path,
@@ -193,9 +223,7 @@ def parse_args(args: Sequence[str]) -> Namespace:
         help="Calculate species-resolved correlation functions",
     )
 
-    parser.add_argument(
-        "--workdir", type=Path, default=Path.cwd(), help="Directory with input files"
-    )
+    parser.add_argument("--workdir", type=Path, help="Directory with input files")
     parser.add_argument("--out-pref", dest="out_prefix", help="Prefix for output files")
     parser.add_argument("--outdir", type=Path, help="Directory to put output files")
     parser.add_argument("-v", action="count", dest="verbosity", default=0)
@@ -204,11 +232,37 @@ def parse_args(args: Sequence[str]) -> Namespace:
     )
 
     parsed = parser.parse_args(args)
+
+    # Parse the input paths
+    prefix, in_path, workdir, parsed.is_axsf = _parse_input_path(
+        parsed.input, parsed.workdir
+    )
+
+    del parsed.input
+    del parsed.workdir
+    if parsed.prefix is None:
+        parsed.prefix = prefix
+
+    def _resolve_path(path: Optional[Path]) -> Optional[Path]:
+        if path is None:
+            return None
+        if not path.is_absolute() and not path.exists():
+            # Relative path that is NOT relative to cwd
+            path = workdir / path
+        # Ensure path exists
+        if not path.exists():
+            raise ValueError(f"{path} does not exist")
+        return path
+
+    parsed.in_path = _resolve_path(in_path)
+    parsed.fdf = _resolve_path(parsed.fdf)
+    parsed.select = _resolve_path(parsed.select)
+
     # Set default args
     if parsed.out_prefix is None:
         parsed.out_prefix = parsed.prefix
     if parsed.outdir is None:
-        parsed.outdir = parsed.workdir
+        parsed.outdir = workdir
     return parsed
 
 
@@ -244,7 +298,7 @@ def velocf(cli_args: Sequence[str]) -> None:
     logger = logging.getLogger(__name__)
 
     # Read trajectory from file
-    traj = _load_trajectory(args.prefix, args.workdir, args.fdf, args.axsf)
+    traj = _load_trajectory(args.prefix, args.in_path, args.is_axsf, fdf_path=args.fdf)
     logger.info("Loaded %d trajectory steps", len(traj))
 
     # Pick only certain atoms
