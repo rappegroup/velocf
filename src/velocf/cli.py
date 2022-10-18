@@ -2,7 +2,7 @@ import argparse
 import logging
 from argparse import ArgumentParser, Namespace
 from pathlib import Path
-from typing import List, Optional, Sequence, Tuple
+from typing import Any, List, Mapping, Optional, Sequence, Tuple
 
 import mendeleev
 import numpy as np
@@ -117,6 +117,7 @@ def _calculate_correlation(
     time_step: float,
     species: Optional[Species] = None,
     use_wk=False,
+    welch_params=None,
 ) -> Tuple[np.ndarray, np.ndarray]:
     """Calculate correlation functions for velocity data."""
     logger = logging.getLogger(__name__)
@@ -137,8 +138,13 @@ def _calculate_correlation(
         logger.info("Calculated frequency correlation function")
     else:
         logger.info("Calculating correlation using Wiener Khinchin theorem")
-        freq_grid = get_freq_grid(len(velocity), time_step)
-        freq_corr = get_freq_correlation_wk(velocity, mass=mass)
+        if not welch_params:
+            freq_grid = get_freq_grid(len(velocity), time_step)
+        else:
+            freq_grid = get_freq_grid(welch_params["nperseg"], time_step)
+        freq_corr = get_freq_correlation_wk(
+            velocity, mass=mass, welch_params=welch_params
+        )
         logger.info("Calculated frequency correlation function")
         time_corr = get_time_correlation_wk(freq_corr)
         logger.info("Calculated time correlation function")
@@ -200,6 +206,7 @@ def parse_args(args: Sequence[str]) -> Namespace:
         action="store_true",
         help="Calculate correlation using Wiener Khinchin theorem",
     )
+    parser.add_argument("--welch")
 
     parser.add_argument(
         "--fdf", type=Path, help="Path to .fdf file to read species from"
@@ -322,8 +329,34 @@ def velocf(cli_args: Sequence[str]) -> None:
 
     # Do correlation for all atoms
     species = traj.species if args.mass_weight else None
+
+    def _welch_params() -> Mapping[str, Any]:
+        import re
+        if match := re.match(r"^(\d+(?:\.\d+)?)([a-zA-Z]+)?", args.welch):
+            if match.group(2) is None:
+                _nperseg = int(match.group(1))
+            else:
+                _val = float(match.group(1))
+                _unit = match.group(2)
+                if _unit == "fs":
+                    pass
+                elif _unit == "ps":
+                    _val *= 1e3
+                else:
+                    raise ValueError(f"Unknown unit {_unit}")
+                _nperseg = int(np.floor(_val))
+        else:
+            raise ValueError(f"Could not parse {args.welch}")
+        return {"nperseg": _nperseg}
+
+    welch = None if args.welch is None else _welch_params()
     time_corr, freq_corr = _calculate_correlation(
-        velocity, args.lag, args.dt, species=species, use_wk=args.wk_corr
+        velocity,
+        args.lag,
+        args.dt,
+        species=species,
+        use_wk=args.wk_corr,
+        welch_params=welch,
     )
 
     _write_correlation(time_corr, freq_corr, args.outdir, args.out_prefix)
@@ -336,7 +369,7 @@ def velocf(cli_args: Sequence[str]) -> None:
             # Filter velocity
             masked_vel = _mask_velocity(velocity, traj.species, target_spec)
             time_corr, freq_corr = _calculate_correlation(
-                masked_vel, args.lag, args.dt, use_wk=args.wk_corr
+                masked_vel, args.lag, args.dt, use_wk=args.wk_corr, welch_params=welch
             )
             _write_correlation(
                 time_corr, freq_corr, args.outdir, f"{args.out_prefix}.{target_spec}"

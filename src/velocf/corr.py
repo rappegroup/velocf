@@ -186,10 +186,12 @@ def get_freq_correlation_wk(
     if welch_params is None:
         logger.debug("Calculating periodogram with full width data")
         ft_velo_sq = np.abs(np.fft.rfft(velocity, axis=0)) ** 2
+        # Apply normalization from fourier transform
+        ft_velo_sq /= len(velocity)
     else:
         logger.debug("Calculating periodogram using Welch's method")
         logger.debug(
-            "Using parameters: %",
+            "Using parameters: %s",
             ", ".join(f"{k}={v}" for k, v in welch_params.items()),
         )
         ft_velo_sq = welch(velocity, **welch_params)
@@ -199,10 +201,9 @@ def get_freq_correlation_wk(
     # Average over atoms and sum on cartesian directions
     freq_corr = np.sum(ft_velo_sq, axis=(1, 2))
     freq_corr /= velocity.shape[1]
-    # Apply normalization from fourier transform
     # Note: Factor of two corrects for different trajectory lengths and brings result
     # in line with explicit correlation function method
-    freq_corr /= len(velocity) * np.sqrt(2)
+    freq_corr /= np.sqrt(2)
     return freq_corr
 
 
