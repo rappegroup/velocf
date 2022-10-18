@@ -132,11 +132,17 @@ def get_freq_correlation_wk(
     freq_corr = np.sum(ft_velo_sq, axis=(1, 2))
     freq_corr /= velocity.shape[1]
     # Apply normalization from fourier transform
-    freq_corr /= len(velocity)
+    # Note: Factor of two corrects for different trajectory lengths and brings result
+    # in line with explicit correlation function method
+    freq_corr /= len(velocity) * np.sqrt(2)
     return freq_corr
 
 
 def get_time_correlation_wk(freq_correlation: np.ndarray) -> np.ndarray:
     """Calculate time correlation from FFT of the frequency spectrum."""
     # This is really an inverse transform, normalize appropriately
-    return np.fft.hfft(freq_correlation, norm="forward")[: len(freq_correlation)]
+    # Factor of two cancels factor added in the VCF
+    return (
+        np.sqrt(2)
+        * np.fft.hfft(freq_correlation, norm="forward")[: len(freq_correlation)]
+    )
