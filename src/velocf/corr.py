@@ -1,7 +1,7 @@
 """Calculate time and frequency domain auto-correlation functions."""
 
 import logging
-from typing import Optional
+from typing import Any, Mapping, Optional
 
 import numpy as np
 import scipy.constants
@@ -110,9 +110,67 @@ def get_freq_correlation(time_correlation: np.ndarray) -> np.ndarray:
     return np.fft.rfft(time_correlation)
 
 
+def welch(
+    x: np.ndarray,
+    nperseg: int,
+    noverlap: Optional[int] = None,
+    *,
+    window: str = "hann",
+    axis: int = 0,
+) -> np.ndarray:
+    """Calculate a periodogram (squared Fourier transform) by Welch's method.
+
+    Welch's method is defined by:
+
+    .. math::
+    P^i(f) = 1 / MU | F_f[w(t) * x_i(t) |^2
+
+    where :math:`x_i(t)` is the windowed spectrum with windows of length M,
+    w(t) is the window function, and U is defined as
+
+    .. math::
+    U = 1 / M \\Sum w^2(n)
+
+    The periodogram is the average of :math:`P^i(f)`
+
+    :param x: Input array
+    :param nperseg: Number of points in each window
+    :param noverlap: Number of points overlap between segments (default: nperseg // 2)
+    :param window: Name of window function to use
+    :param axis: Axis of the array to use for the periodogram
+    :returns: Periodogram with the same axes as input
+    """
+    # pylint: disable=import-outside-toplevel
+    from scipy.signal import get_window
+
+    if noverlap is None:
+        noverlap = nperseg // 2
+    if noverlap < 0 or noverlap > nperseg:
+        raise ValueError(f"noverlap = {noverlap}")
+
+    window_fn = get_window(window, nperseg)
+    win_norm = np.sum(window_fn**2) / nperseg
+    # Update axis to account for the new segment axis which will be added
+    axis = axis if axis >= 0 else len(x.shape) - axis
+    axis += 1
+    # Reshape window for broadcasting with segmented array
+    window_fn = np.moveaxis(window_fn.reshape((1,) * len(x.shape) + (-1,)), -1, axis)
+
+    n_hop = nperseg - noverlap
+    n_block = int(np.floor((len(x) - nperseg) / n_hop)) + 1
+    blocks = [x[i * n_hop : i * n_hop + nperseg] for i in range(n_block)]
+    blocks = np.stack(blocks)
+
+    block_ft = np.abs(np.fft.rfft(window_fn * blocks, axis=axis)) ** 2
+    avg_ft = np.mean(block_ft, axis=0)
+    return avg_ft / win_norm / nperseg
+
+
 def get_freq_correlation_wk(
     velocity: np.ndarray,
     mass: Optional[np.ndarray] = None,
+    *,
+    welch_params: Optional[Mapping[str, Any]] = None,
 ) -> np.ndarray:
     """Calculate the frequency domain autocorrelation.
 
@@ -121,10 +179,20 @@ def get_freq_correlation_wk(
 
     :param velocity: matrix of velocities, in a.u./fs; shape [n_time, n_atom, 3]
     :param mass: vector of element masses; shape [n_atom,]
+    :param welch_params: Parameters to calculate power spectrum with Welch's method
     :returns: frequency domain auto-correlation function
     """
     logger = logging.getLogger(__name__)
-    ft_velo_sq = np.abs(np.fft.rfft(velocity, axis=0)) ** 2
+    if welch_params is None:
+        logger.debug("Calculating periodogram with full width data")
+        ft_velo_sq = np.abs(np.fft.rfft(velocity, axis=0)) ** 2
+    else:
+        logger.debug("Calculating periodogram using Welch's method")
+        logger.debug(
+            "Using parameters: %",
+            ", ".join(f"{k}={v}" for k, v in welch_params.items()),
+        )
+        ft_velo_sq = welch(velocity, **welch_params)
     if mass is not None:
         logger.info("Weighting trajectory by element mass")
         ft_velo_sq = mass.reshape((-1, 1)) * ft_velo_sq
