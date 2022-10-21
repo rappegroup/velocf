@@ -332,6 +332,7 @@ def velocf(cli_args: Sequence[str]) -> None:
 
     def _welch_params() -> Mapping[str, Any]:
         import re
+
         if match := re.match(r"^(\d+(?:\.\d+)?)([a-zA-Z]+)?", args.welch):
             if match.group(2) is None:
                 _nperseg = int(match.group(1))
@@ -368,8 +369,16 @@ def velocf(cli_args: Sequence[str]) -> None:
             logger.info("Doing correlation for %s", target_spec)
             # Filter velocity
             masked_vel = _mask_velocity(velocity, traj.species, target_spec)
+            masked_species = (
+                masked_vel.shape[1] * (target_spec,) if species is not None else None
+            )
             time_corr, freq_corr = _calculate_correlation(
-                masked_vel, args.lag, args.dt, use_wk=args.wk_corr, welch_params=welch
+                masked_vel,
+                args.lag,
+                args.dt,
+                species=masked_species,
+                use_wk=args.wk_corr,
+                welch_params=welch,
             )
             _write_correlation(
                 time_corr, freq_corr, args.outdir, f"{args.out_prefix}.{target_spec}"
