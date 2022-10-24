@@ -31,7 +31,6 @@ def _lagged_correlation(velocity: np.ndarray, lag: int) -> float:
         ne = None
 
     t_max = len(velocity) - lag
-    n_at = velocity.shape[1]
     # Reduce over both time and atom axis
     if ne:
         _v_head = velocity[:t_max]  # noqa: F841
@@ -39,8 +38,8 @@ def _lagged_correlation(velocity: np.ndarray, lag: int) -> float:
         corr = ne.evaluate("sum(_v_head * _v_lag)")
     else:
         corr = np.sum(velocity[:t_max] * velocity[lag:])
-    # Normalize by time steps and atoms
-    corr /= n_at * t_max
+    # Normalize by time steps
+    corr /= t_max
     return float(corr)
 
 
@@ -48,12 +47,15 @@ def get_time_correlation(
     velocity: np.ndarray,
     max_lag: Optional[int] = None,
     mass: Optional[np.ndarray] = None,
+    *,
+    norm_nat: bool = False,
 ) -> np.ndarray:
     """Calculate time domain auto-correlation function.
 
     :param velocity: matrix of velocities, in a.u./fs; shape [n_time, n_atom, 3]
     :param max_lag: maximum time lag to include in correlation function
     :param mass: vector of element masses; shape [n_atom,]
+    :param norm_nat: Normalize the correlation by the number of atoms in the sample
     :returns: time domain auto-correlation function
     """
     logger = logging.getLogger(__name__)
@@ -87,6 +89,9 @@ def get_time_correlation(
     # Could be done in parallel
     for lag in range(max_lag):
         corr[lag] = _lagged_correlation(velocity, lag)
+
+    if norm_nat:
+        corr /= n_atom
 
     return corr
 
@@ -171,6 +176,7 @@ def get_freq_correlation_wk(
     mass: Optional[np.ndarray] = None,
     *,
     welch_params: Optional[Mapping[str, Any]] = None,
+    norm_nat: bool = False,
 ) -> np.ndarray:
     """Calculate the frequency domain autocorrelation.
 
@@ -180,6 +186,7 @@ def get_freq_correlation_wk(
     :param velocity: matrix of velocities, in a.u./fs; shape [n_time, n_atom, 3]
     :param mass: vector of element masses; shape [n_atom,]
     :param welch_params: Parameters to calculate power spectrum with Welch's method
+    :param norm_nat: Normalize VCF by the number of atoms in the sample
     :returns: frequency domain auto-correlation function
     """
     logger = logging.getLogger(__name__)
@@ -200,7 +207,8 @@ def get_freq_correlation_wk(
         ft_velo_sq = mass.reshape((-1, 1)) * ft_velo_sq
     # Average over atoms and sum on cartesian directions
     freq_corr = np.sum(ft_velo_sq, axis=(1, 2))
-    freq_corr /= velocity.shape[1]
+    if norm_nat:
+        freq_corr /= velocity.shape[1]
     # Note: Factor of two corrects for different trajectory lengths and brings result
     # in line with explicit correlation function method
     freq_corr /= np.sqrt(2)

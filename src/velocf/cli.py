@@ -118,6 +118,7 @@ def _calculate_correlation(
     species: Optional[Species] = None,
     use_wk=False,
     welch_params=None,
+    norm_nat: bool = False,
 ) -> Tuple[np.ndarray, np.ndarray]:
     """Calculate correlation functions for velocity data."""
     logger = logging.getLogger(__name__)
@@ -130,7 +131,9 @@ def _calculate_correlation(
 
     if not use_wk:
         # Calculate time correlation function
-        time_corr = get_time_correlation(velocity, max_lag=lag, mass=mass)
+        time_corr = get_time_correlation(
+            velocity, max_lag=lag, mass=mass, norm_nat=norm_nat
+        )
         logger.info("Calculated time correlation function")
         # Calculate frequency correlation
         freq_grid = get_freq_grid(len(time_corr), time_step)
@@ -143,7 +146,7 @@ def _calculate_correlation(
         else:
             freq_grid = get_freq_grid(welch_params["nperseg"], time_step)
         freq_corr = get_freq_correlation_wk(
-            velocity, mass=mass, welch_params=welch_params
+            velocity, mass=mass, welch_params=welch_params, norm_nat=norm_nat
         )
         logger.info("Calculated frequency correlation function")
         time_corr = get_time_correlation_wk(freq_corr)
@@ -206,7 +209,10 @@ def parse_args(args: Sequence[str]) -> Namespace:
         action="store_true",
         help="Calculate correlation using Wiener Khinchin theorem",
     )
-    parser.add_argument("--welch")
+    parser.add_argument("--welch", metavar="WINDOW")
+    parser.add_argument(
+        "--norm-nat", action="store_true", help="Normalize by number of atoms in cell"
+    )
 
     parser.add_argument(
         "--fdf", type=Path, help="Path to .fdf file to read species from"
@@ -358,6 +364,7 @@ def velocf(cli_args: Sequence[str]) -> None:
         species=species,
         use_wk=args.wk_corr,
         welch_params=welch,
+        norm_nat=args.norm_nat,
     )
 
     _write_correlation(time_corr, freq_corr, args.outdir, args.out_prefix)
@@ -379,6 +386,7 @@ def velocf(cli_args: Sequence[str]) -> None:
                 species=masked_species,
                 use_wk=args.wk_corr,
                 welch_params=welch,
+                norm_nat=args.norm_nat,
             )
             _write_correlation(
                 time_corr, freq_corr, args.outdir, f"{args.out_prefix}.{target_spec}"
