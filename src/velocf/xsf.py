@@ -131,7 +131,7 @@ def read_axsf(
         assert species == step_spec
         positions.append(step_pos)
 
-    return Trajectory(basis, species, positions, "angstrom", var_cell=animate_cell)
+    return Trajectory(basis, species, np.stack(positions), "angstrom", var_cell=animate_cell)
 
 
 _T = TypeVar("_T")
