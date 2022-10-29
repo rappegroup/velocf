@@ -171,6 +171,50 @@ def welch(
     return avg_ft / win_norm / nperseg
 
 
+def spectrogram(
+    x: np.ndarray,
+    nperseg: int,
+    noverlap: Optional[int] = None,
+    *,
+    window: str = "hann",
+    axis: int = 0,
+) -> np.ndarray:
+    """Computes a windowed spectrogram of the input time series.
+
+    :param x: Input array
+    :param nperseg: Number of points in each window
+    :param noverlap: Number of points overlap between segments (default: nperseg // 2)
+    :param window: Name of window function to use
+    :param axis: Axis of the array to use for the periodogram
+    :returns: Spectrogram with one additional axis than the input
+    """
+    # pylint: disable=import-outside-toplevel
+    from scipy.signal import get_window
+
+    if noverlap is None:
+        noverlap = nperseg // 2
+    if noverlap < 0 or noverlap > nperseg:
+        raise ValueError(f"noverlap = {noverlap}")
+
+    # Segment array into overlapping chunks
+    n_hop = nperseg - noverlap
+    n_block = int(np.floor((x.shape[axis] - nperseg) / n_hop)) + 1
+    blocks = [x[i * n_hop : i * n_hop + nperseg] for i in range(n_block)]
+    blocks = np.stack(blocks)
+
+    window_fn = get_window(window, nperseg)
+    win_norm = np.sum(window_fn**2) / nperseg
+    # Update axis to account for the new segment axis which will be added
+    axis = axis if axis >= 0 else len(x.shape) - axis
+    axis += 1
+    # Reshape window for broadcasting with segmented array
+    window_fn = np.moveaxis(window_fn.reshape((1,) * len(x.shape) + (-1,)), -1, axis)
+
+    # Apply window function and fourier transform
+    block_ft = np.abs(np.fft.rfft(window_fn * blocks, axis=axis)) ** 2
+    return block_ft / win_norm / nperseg
+
+
 def get_freq_correlation_wk(
     velocity: np.ndarray,
     mass: Optional[np.ndarray] = None,
