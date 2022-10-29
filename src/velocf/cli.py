@@ -111,6 +111,18 @@ def _restrict_trajectory(traj: Trajectory, select_path: Path) -> Trajectory:
     )
 
 
+def get_mass(species: Species) -> np.ndarray:
+    """Get atomic masses for a list of elements (in amu)."""
+    # pylint: disable=import-outside-toplevel
+    from functools import cache
+
+    @cache
+    def _lookup_mass(el: str) -> float:
+        return mendeleev.element(el).mass
+
+    return np.array(tuple(map(_lookup_mass, species)))
+
+
 def _calculate_correlation(
     velocity: np.ndarray,
     lag: int,
@@ -125,7 +137,7 @@ def _calculate_correlation(
 
     # Calculate element masses
     if species is not None:
-        mass = np.array(tuple(map(lambda el: mendeleev.element(el).mass, species)))
+        mass = get_mass(species)
     else:
         mass = None
 
