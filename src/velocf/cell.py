@@ -41,12 +41,10 @@ class Trajectory(Sequence[Structure]):
         self.var_cell = var_cell
 
     @overload
-    def __getitem__(self, i: int) -> Structure:
-        ...
+    def __getitem__(self, i: int) -> Structure: ...
 
     @overload
-    def __getitem__(self, s: slice) -> "Trajectory":
-        ...
+    def __getitem__(self, s: slice) -> "Trajectory": ...
 
     def __getitem__(self, idx: Union[int, slice]) -> Union[Structure, "Trajectory"]:
         basis_slice = self.basis[idx] if self.var_cell else self.basis
