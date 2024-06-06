@@ -28,8 +28,8 @@ dependencies = [
 dynamic = ["version"]
 
 [project.urls]
-Repository = "https://github.com/aschankler/velocf"
-Issues = "https://github.com/aschankler/velocf/issues"
+Repository = "https://github.com/rappegroup/velocf"
+Issues = "https://github.com/rappegroup/velocf/issues"
 
 [project.optional-dependencies]
 NE = ["numexpr"]
