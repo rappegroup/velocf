@@ -45,14 +45,14 @@ for a window in units of time (ps and fs are understood).
 
 In the normal mode of operation, the time correlation function is first calculated as
 
-$$C(t) = \Sum_i m_i \left\langle v_i(t+\tau) \cdot v_i(\tau) \right\rangle_{\tau}$$
+$$C(t) = \sum_i m_i \left\langle v_i(t+\tau) \cdot v_i(\tau) \right\rangle_{\tau}$$
 
 where the average is performed over all starting times $\tau$ and the time lag $t$ is truncated
 based on user input. The frequency correlation $C(\omega)$ is then obtained by Fourier
 transforming $C(t)$. Alternatively, by the Wiener-Khinchin theorem, we can obtain the frequency
 correlation by
 
-$$C(\omega) = \Sum_i m_i | \mathcal{F}[ v_i(t) ]|^2$$
+$$C(\omega) = \sum_i m_i | \mathcal{F}[ v_i(t) ]|^2$$
 
 The time correlation is then obtained by Fourier transforming $C(\omega)$.
 Velocities are calculated using a central finite difference.
