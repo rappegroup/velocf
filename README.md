@@ -1,5 +1,7 @@
 # velocf
 
+[![DOI](https://zenodo.org/badge/507150770.svg)](https://zenodo.org/doi/10.5281/zenodo.11497902)
+
 > Calculate velocity auto-correlation functions from SIESTA trajectories.
 
 ## Description
